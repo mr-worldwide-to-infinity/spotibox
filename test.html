@@ -1,4 +1,3 @@
-cat > test.html <<'EOF'
 <!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -17,7 +16,7 @@ cat > test.html <<'EOF'
 </head>
 <body>
   <h1>WiFi instellen</h1>
-  <p>Als alles goed gaat: kies je netwerk, vul wachtwoord in, druk connect. Daarna verdwijnt dit AP en gaat de Pi op je WiFi.</p>
+  <p>Kies je netwerk, vul het wachtwoord in en druk verbinden. Daarna verdwijnt het AP en gaat de Pi op jouw WiFi.</p>
 
   <div class="row">
     <button id="refresh">Scan netwerken</button>
@@ -31,7 +30,7 @@ cat > test.html <<'EOF'
   <hr />
   <h2>Spotify</h2>
   <p>Na verbinding kun je Spotify streamen via <strong>Spotify Connect</strong>:
-    open Spotify op je telefoon, ga naar <em>Beschikbare apparaten</em> en kies de Pi (bijv. <code>PiZero</code>).
+    open Spotify op je telefoon, ga naar <em>Beschikbare apparaten</em> en kies de Pi.
   </p>
 
 <script>
@@ -76,7 +75,7 @@ async function connectWifi() {
     setStatus("Fout: " + (data.error || "onbekend"), false);
     return;
   }
-  setStatus("Opgeslagen. De Pi probeert nu te verbinden. Verbind straks met je normale WiFi en open het IP van de Pi.", true);
+  setStatus("Opgeslagen. De Pi probeert nu te verbinden. Daarna: http://spotibox.local:3001", true);
 }
 
 async function pollStatus() {
@@ -95,4 +94,3 @@ setInterval(pollStatus, 3000);
 </script>
 </body>
 </html>
-EOF

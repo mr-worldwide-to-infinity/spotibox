@@ -1,164 +1,91 @@
-Prima. Dan krijg je ‘m hier platte tekst, zodat je ‘m zelf kunt copy-pasten in een `README.md`. Technologie: geweldig als het werkt. Als het niet werkt, is het vooral een hobby.
+# Pi Zero W WiFi Setup Portal + Spotify Connect (spotibox)
 
----
-
-# Pi Zero W WiFi Setup Portal + Spotify Connect (zonder client-id)
-
-Dit project doet twee dingen:
-
-1. **Als de Pi geen WiFi heeft**: hij start een eigen WiFi access point (AP) `RaspberryPiAP` en serveert een webportal op `http://192.168.4.1:3001` om WiFi in te stellen.
-2. **Als de Pi wél WiFi heeft**: hij stopt het AP en gebruikt normale client-mode.
-
-Daarna kun je (optioneel) **Spotify streamen via Spotify Connect** met `raspotify` (geen Spotify developer client-id/secret).
-Let op: Pi Zero W = **ARMv6**. `raspotify` werkt hier alleen met een oudere, “laatste bekende” versie (kan ooit breken door Spotify updates).
+Dit project doet automatisch:
+1) Geen WiFi? Dan start de Pi een Access Point (AP) "RaspberryPiAP" + captive portal.
+2) WiFi gekozen via portal? Dan schakelt hij naar client-mode op jouw WiFi.
+3) mDNS/Avahi wordt geïnstalleerd zodat je de Pi op je WiFi kunt bereiken via: spotibox.local
+4) Spotify Connect (raspotify) wordt automatisch mee geïnstalleerd (ARMv6).
 
 ---
 
 ## Vereisten
-
-* Raspberry Pi Zero W (v1, **geen** Zero 2 W)
-* Raspberry Pi OS Lite (aanrader)
-* SD-kaart, voeding, WiFi bereik
-* (Voor Spotify Connect) meestal Spotify Premium
+- Raspberry Pi Zero W (ARMv6)
+- Raspberry Pi OS Lite aanbevolen
+- Internet tijdens installatie (1e keer)
 
 ---
 
-## Bestanden in deze map
+## Installatie (1 commando)
+Zet alle bestanden in:
+  /home/pi/pi-zero-portal
 
-* `setup.sh` – installeert benodigde packages + zet services aan
-* `wifi-check.sh` – start/stopt AP afhankelijk van WiFi status
-* `portal_server.py` – simpele captive portal API + serve `test.html`
-* `test.html` – web UI om een WiFi SSID + wachtwoord op te geven
-* `install_spotify_connect_armv6.sh` – installeert `raspotify` (ARMv6 pinned)
+Bestanden:
+- setup.sh
+- wifi-check.sh
+- portal_server.py
+- test.html
+- install_spotify_connect_armv6.sh
 
----
+Maak uitvoerbaar:
+  chmod +x setup.sh wifi-check.sh portal_server.py install_spotify_connect_armv6.sh
 
-## Handmatige stappen (doe dit op de Pi)
+Run setup:
+  sudo ./setup.sh
 
-### 1) Zet de bestanden op de Pi
-
-Maak een map en plaats alle bestanden erin, bijvoorbeeld:
-
-```bash
-mkdir -p /home/pi/pi-zero-portal
-cd /home/pi/pi-zero-portal
-# zet hier setup.sh, wifi-check.sh, portal_server.py, test.html, install_spotify_connect_armv6.sh neer
-```
-
-Maak ze uitvoerbaar:
-
-```bash
-chmod +x setup.sh wifi-check.sh portal_server.py install_spotify_connect_armv6.sh
-```
-
-### 2) Run de installer
-
-```bash
-sudo ./setup.sh
-```
-
-Dit installeert o.a. `hostapd`, `dnsmasq`, `iw`, en zet twee systemd services aan:
-
-* `pi-wifi-check.service` (AP aan/uit)
-* `pi-portal.service` (web portal op poort 3001)
-
-### 3) Eerste keer verbinden (als er nog geen WiFi is)
-
-Als de Pi geen WiFi heeft, maakt hij een AP:
-
-* SSID: **RaspberryPiAP**
-* Wachtwoord: **raspberry**
-* Portal: **[http://192.168.4.1:3001](http://192.168.4.1:3001)**
-
-Stappen:
-
-1. Verbind met `RaspberryPiAP` vanaf je telefoon/laptop.
-2. Open `http://192.168.4.1:3001`
-3. Klik **Scan netwerken**, kies jouw SSID, vul wachtwoord in, klik **Verbinden**.
-4. Het AP gaat uit en de Pi probeert te verbinden met je gekozen WiFi.
-
-### 4) Vind het IP-adres van de Pi op je normale WiFi
-
-Opties:
-
-**A) Via router (DHCP lijst)**: zoek “raspberrypi” of “PiZero”.
-
-**B) Op de Pi zelf** (als je SSH/console hebt):
-
-```bash
-hostname -I
-iwgetid -r
-```
+Klaar. Geen losse handmatige stappen meer.
 
 ---
 
-## Spotify Connect installeren (optioneel, geen client-id)
+## Gebruik
 
-Als de Pi verbonden is met je normale WiFi:
+### Scenario A: Geen WiFi beschikbaar (of credentials nog niet ingesteld)
+De Pi start een AP:
 
-```bash
-sudo ./install_spotify_connect_armv6.sh
-```
+SSID: RaspberryPiAP
+Wachtwoord: raspberry
 
-Daarna:
+Open portal:
+- http://192.168.4.1:3001
+- vaak werkt ook: http://spotibox.local  (afhankelijk van device/DNS gedrag)
 
-1. Open Spotify op je telefoon.
-2. Ga naar **Beschikbare apparaten**.
-3. Kies device **PiZero**.
+Kies je WiFi, vul wachtwoord in, klik Verbinden.
+Daarna gaat het AP uit en probeert de Pi te verbinden met jouw WiFi.
 
-Device-naam aanpassen kan in `/etc/default/raspotify` (variabele `DEVICE_NAME`) en daarna:
+### Scenario B: Pi zit op jouw WiFi
+Open portal op je normale netwerk:
+- http://spotibox.local:3001
 
-```bash
-sudo systemctl restart raspotify
-```
-
----
-
-## Debug / status checks
-
-### Services status
-
-```bash
-sudo systemctl status pi-wifi-check.service
-sudo systemctl status pi-portal.service
-sudo systemctl status hostapd dnsmasq
-```
-
-### Logs
-
-```bash
-sudo journalctl -u pi-portal.service -n 200 --no-pager
-sudo journalctl -u pi-wifi-check.service -n 200 --no-pager
-sudo journalctl -u hostapd -n 200 --no-pager
-sudo journalctl -u dnsmasq -n 200 --no-pager
-```
-
-### Handmatig AP opnieuw forceren
-
-```bash
-sudo systemctl restart pi-wifi-check.service
-```
+(Als je client geen .local kan: check je router DHCP lijst of gebruik hostname -I op de Pi.)
 
 ---
 
-## Bekende beperkingen (Pi Zero W realiteit)
+## Spotify Connect
+Raspotify wordt automatisch geïnstalleerd door setup.sh.
 
-* ARMv6 is oud. Veel moderne packages droppen support.
-* `raspotify` draait hier met een **oude pinned versie**. Als Spotify iets wijzigt kan playback stoppen.
-* Dit is bewust **Node-vrij** gehouden om ARMv6 library ellende te vermijden.
+Gebruik:
+1) Open Spotify op je telefoon/laptop
+2) Ga naar "Beschikbare apparaten"
+3) Kies de Pi (raspotify device)
+
+Let op: dit is Spotify Connect. Je logt dus niet “in via de browser portal”.
+Je kiest het apparaat in Spotify.
+
+---
+
+## Debug
+Status:
+  systemctl status pi-portal.service
+  systemctl status pi-wifi-check.timer
+  systemctl status hostapd dnsmasq
+
+Logs:
+  journalctl -u pi-portal.service -n 200 --no-pager
+  journalctl -u pi-wifi-check.service -n 200 --no-pager
+  journalctl -u hostapd -n 200 --no-pager
+  journalctl -u dnsmasq -n 200 --no-pager
 
 ---
 
-## Verwijderen (als je klaar bent met het leven)
-
-```bash
-sudo systemctl disable --now pi-portal.service pi-wifi-check.service || true
-sudo rm -f /etc/systemd/system/pi-portal.service /etc/systemd/system/pi-wifi-check.service
-sudo systemctl daemon-reload
-
-sudo apt-get remove -y hostapd dnsmasq || true
-# Optional:
-sudo apt-get remove -y raspotify || true
-```
-
----
+## Waarom dit nu wél boot-proof is
+De WiFi check draait niet één keer en stopt, maar via een systemd timer elke 10 seconden.
+En hij wacht niet op "network-online", want dat kan juist nooit komen als je géén WiFi hebt.

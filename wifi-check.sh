@@ -1,40 +1,48 @@
-cat > wifi-check.sh <<'EOF'
 #!/bin/bash
-set -e
+set -euo pipefail
 
+IFACE="wlan0"
 SSID_AP="RaspberryPiAP"
 PASS_AP="raspberry"
 AP_IP="192.168.4.1"
+HOST_LOCAL="spotibox.local"
 
 has_wifi() {
-  # returns 0 if connected to an AP
-  iwgetid -r >/dev/null 2>&1
+  ssid="$(iwgetid -r 2>/dev/null || true)"
+  [[ -n "${ssid}" ]]
 }
 
 start_ap() {
   echo "[wifi-check] No WiFi detected. Starting AP..."
 
-  # Stop client services to avoid fighting over wlan0
+  rfkill unblock wifi || true
+
   systemctl stop wpa_supplicant || true
   systemctl stop dhcpcd || true
 
-  # Configure wlan0 static IP for AP mode
-  ip link set wlan0 down || true
-  ip addr flush dev wlan0 || true
-  ip addr add ${AP_IP}/24 dev wlan0
-  ip link set wlan0 up
+  ip link set "$IFACE" down || true
+  ip addr flush dev "$IFACE" || true
+  ip addr add ${AP_IP}/24 dev "$IFACE"
+  ip link set "$IFACE" up
 
-  # dnsmasq config for captive DHCP
   cat >/etc/dnsmasq.d/rpi-ap.conf <<CONF
-interface=wlan0
+interface=${IFACE}
 dhcp-range=192.168.4.2,192.168.4.50,255.255.255.0,24h
+dhcp-option=option:router,${AP_IP}
+dhcp-option=option:dns-server,${AP_IP}
+
+# Captive-ish: stuur ALLE DNS naar de Pi
+address=/#/${AP_IP}
+
+# Specifiek: spotibox.local -> AP IP
+address=/${HOST_LOCAL}/${AP_IP}
+
 domain-needed
 bogus-priv
 CONF
 
-  # hostapd config
   cat >/etc/hostapd/hostapd.conf <<CONF
-interface=wlan0
+interface=${IFACE}
 driver=nl80211
 ssid=${SSID_AP}
 hw_mode=g
@@ -48,17 +56,20 @@ wpa_key_mgmt=WPA-PSK
 rsn_pairwise=CCMP
 CONF
 
-  # Ensure hostapd uses our config
   if [ -f /etc/default/hostapd ]; then
     sed -i 's|^#\?DAEMON_CONF=.*|DAEMON_CONF="/etc/hostapd/hostapd.conf"|' /etc/default/hostapd
   else
     echo 'DAEMON_CONF="/etc/hostapd/hostapd.conf"' >/etc/default/hostapd
   fi
 
+  # Redirect poort 80 naar portal (3001) zodat captive portal vaker opengaat
+  iptables -t nat -C PREROUTING -i "$IFACE" -p tcp --dport 80 -j REDIRECT --to-ports 3001 2>/dev/null \
+    || iptables -t nat -A PREROUTING -i "$IFACE" -p tcp --dport 80 -j REDIRECT --to-ports 3001
+
   systemctl restart dnsmasq
   systemctl restart hostapd
 
-  echo "[wifi-check] AP up: ${SSID_AP} / ${PASS_AP} at http://${AP_IP}:3001/"
+  echo "[wifi-check] AP up: ${SSID_AP}/${PASS_AP} -> http://${AP_IP}:3001/"
 }
 
 stop_ap_restore_client() {
@@ -68,14 +79,14 @@ stop_ap_restore_client() {
   systemctl stop dnsmasq || true
   rm -f /etc/dnsmasq.d/rpi-ap.conf || true
 
-  ip addr flush dev wlan0 || true
+  iptables -t nat -D PREROUTING -i "$IFACE" -p tcp --dport 80 -j REDIRECT --to-ports 3001 2>/dev/null || true
 
-  # Restart normal client networking
+  ip addr flush dev "$IFACE" || true
+
   systemctl start dhcpcd || true
   systemctl start wpa_supplicant || true
 }
 
-# Main
 if has_wifi; then
   echo "[wifi-check] Connected to: $(iwgetid -r)"
   if systemctl is-active --quiet hostapd; then
@@ -84,5 +95,3 @@ if has_wifi; then
 else
   start_ap
 fi
-EOF
-chmod +x wifi-check.sh
